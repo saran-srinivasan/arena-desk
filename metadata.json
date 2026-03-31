@@ -1,0 +1,5 @@
+{
+  "name": "ArenaDesk Obsidian",
+  "description": "High-density multi-sport facility management dashboard with real-time session tracking and conflict-aware scheduling.",
+  "requestFramePermissions": ["camera"]
+}
