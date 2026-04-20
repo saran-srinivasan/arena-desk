@@ -34,15 +34,23 @@ export const BookingsListView: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
-  const handleCheckIn = (booking: typeof bookings[0]) => {
-    checkInBooking(booking.id);
-    checkIn({ ...booking, status: 'Active' });
-    success('Checked In', `${booking.customerName} has been checked in for ${booking.sport}.`);
+  const handleCheckIn = async (booking: typeof bookings[0]) => {
+    try {
+      await checkInBooking(booking.id);
+      checkIn({ ...booking, status: 'Active' });
+      success('Checked In', `${booking.customerName} has been checked in for ${booking.sport}.`);
+    } catch (err) {
+      console.error('Check-in failed:', err);
+    }
   };
 
-  const handleCancel = (bookingId: string) => {
-    cancelBooking(bookingId);
-    success('Booking Cancelled', 'The booking has been cancelled and the slot is now free.');
+  const handleCancel = async (bookingId: string) => {
+    try {
+      await cancelBooking(bookingId);
+      success('Booking Cancelled', 'The booking has been cancelled and the slot is now free.');
+    } catch (err) {
+      console.error('Cancel failed:', err);
+    }
     setCancelTarget(null);
   };
 

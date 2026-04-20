@@ -101,7 +101,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onCl
   const invalidTime = conflicts.some(c => c.type === 'INVALID_TIME' as any);
   const isValid = conflicts.length === 0 && customerId !== '' && resourceId !== '';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid || !proposedBooking) return;
 
@@ -109,39 +109,43 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onCl
     const resource = resources.find(r => r.id === resourceId);
     if (!customer || !resource) return;
 
-    if (isEditing && editingBooking) {
-      updateBooking(editingBooking.id, {
-        customerId: customer.id,
-        customerName: customer.name,
-        sport,
-        resourceId: resource.id,
-        resourceName: resource.name,
-        startTime: proposedBooking.startTime,
-        endTime: proposedBooking.endTime,
-        notes,
-      });
-      success('Booking Updated', `Successfully updated booking for ${resource.name}.`);
-    } else {
-      const newBooking: Booking = {
-        id: generateBookingId(),
-        customerId: customer.id,
-        customerName: customer.name,
-        sport,
-        resourceId: resource.id,
-        resourceName: resource.name,
-        startTime: proposedBooking.startTime,
-        endTime: proposedBooking.endTime,
-        status: 'Confirmed',
-        notes,
-        createdBy: user.name,
-        createdAt: new Date().toISOString(),
-        priceCents: 5000, // Hardcoded for now
-      };
+    try {
+      if (isEditing && editingBooking) {
+        await updateBooking(editingBooking.id, {
+          customerId: customer.id,
+          customerName: customer.name,
+          sport,
+          resourceId: resource.id,
+          resourceName: resource.name,
+          startTime: proposedBooking.startTime,
+          endTime: proposedBooking.endTime,
+          notes,
+        });
+        success('Booking Updated', `Successfully updated booking for ${resource.name}.`);
+      } else {
+        const newBooking: Booking = {
+          id: generateBookingId(), // Temporary — server assigns real ID
+          customerId: customer.id,
+          customerName: customer.name,
+          sport,
+          resourceId: resource.id,
+          resourceName: resource.name,
+          startTime: proposedBooking.startTime,
+          endTime: proposedBooking.endTime,
+          status: 'Confirmed',
+          notes,
+          createdBy: user.name,
+          createdAt: new Date().toISOString(),
+          priceCents: 5000,
+        };
 
-      createBooking(newBooking);
-      success('Booking Confirmed', `Successfully booked ${resource.name} at ${startTime}.`);
+        await createBooking(newBooking);
+        success('Booking Confirmed', `Successfully booked ${resource.name} at ${startTime}.`);
+      }
+      handleClose();
+    } catch (err: any) {
+      console.error('Booking failed:', err);
     }
-    handleClose();
   };
 
   const handleClose = () => {

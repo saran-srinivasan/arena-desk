@@ -56,10 +56,14 @@ export const DashboardView: React.FC = () => {
     .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
     .slice(0, 3);
 
-  const handleCheckOut = (bookingId: string) => {
-    checkOut(bookingId);
-    completeBooking(bookingId);
-    success('Session Completed', 'Customer has been checked out successfully.');
+  const handleCheckOut = async (bookingId: string) => {
+    try {
+      checkOut(bookingId);
+      await completeBooking(bookingId);
+      success('Session Completed', 'Customer has been checked out successfully.');
+    } catch (err) {
+      console.error('Check-out failed:', err);
+    }
     setCheckoutTarget(null);
   };
 

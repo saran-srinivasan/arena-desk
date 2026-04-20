@@ -76,7 +76,7 @@ export const CustomersListView: React.FC = () => {
             <div className="flex items-start gap-4">
               {/* Avatar */}
               <div className="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center shrink-0 text-primary font-bold text-lg ring-2 ring-primary/20">
-                {customer.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                {customer?.photoUrl ? <img src={customer?.photoUrl} alt="Captured" /> : customer.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
               </div>
 
               <div className="flex-1 min-w-0">

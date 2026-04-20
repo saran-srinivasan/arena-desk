@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { ActiveSession, SessionSeverity, Booking } from '../types';
-import { mockSessions } from '../data/mockData';
+import { sessionApi } from '../api/sessionApi';
 
 // ── Helpers ───────────────────────────────────────────────────
 export function deriveSeverity(remainingSeconds: number): SessionSeverity {
@@ -17,14 +17,17 @@ function computeRemaining(endTime: string): number {
 // ── State ─────────────────────────────────────────────────────
 interface SessionState {
   sessions: ActiveSession[];
+  loading: boolean;
 }
 
 // ── Actions ───────────────────────────────────────────────────
 type SessionAction =
   | { type: 'TICK' }
+  | { type: 'SET_SESSIONS'; payload: ActiveSession[] }
   | { type: 'ADD_SESSION'; payload: ActiveSession }
   | { type: 'REMOVE_SESSION'; payload: string }
-  | { type: 'EXTEND_SESSION'; payload: { bookingId: string; additionalMinutes: number } };
+  | { type: 'UPDATE_SESSION'; payload: ActiveSession }
+  | { type: 'SET_LOADING'; payload: boolean };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
@@ -42,6 +45,12 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         }),
       };
 
+    case 'SET_SESSIONS':
+      return { ...state, sessions: action.payload, loading: false };
+
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+
     case 'ADD_SESSION':
       return { ...state, sessions: [...state.sessions, action.payload] };
 
@@ -51,23 +60,12 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         sessions: state.sessions.filter(s => s.bookingId !== action.payload),
       };
 
-    case 'EXTEND_SESSION':
+    case 'UPDATE_SESSION':
       return {
         ...state,
-        sessions: state.sessions.map(s => {
-          if (s.bookingId !== action.payload.bookingId) return s;
-          const newEnd = new Date(
-            new Date(s.endTime).getTime() + action.payload.additionalMinutes * 60 * 1000
-          ).toISOString();
-          const remaining = computeRemaining(newEnd);
-          return {
-            ...s,
-            endTime: newEnd,
-            remainingSeconds: remaining,
-            isOverstay: remaining < 0,
-            severity: deriveSeverity(remaining),
-          };
-        }),
+        sessions: state.sessions.map(s =>
+          s.bookingId === action.payload.bookingId ? action.payload : s
+        ),
       };
 
     default:
@@ -78,9 +76,11 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
 // ── Context ───────────────────────────────────────────────────
 interface SessionContextValue {
   sessions: ActiveSession[];
+  loading: boolean;
   checkIn: (booking: Booking) => void;
   checkOut: (bookingId: string) => void;
   extend: (bookingId: string, additionalMinutes: number) => void;
+  refreshSessions: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -88,11 +88,25 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 // ── Provider ──────────────────────────────────────────────────
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(sessionReducer, {
-    sessions: mockSessions.map(s => ({
-      ...s,
-      severity: deriveSeverity(s.remainingSeconds) as SessionSeverity,
-    })),
+    sessions: [],
+    loading: true,
   });
+
+  // ── Fetch initial sessions from API ─────────────────────
+  const fetchSessions = useCallback(async () => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      const sessions = await sessionApi.getAll();
+      dispatch({ type: 'SET_SESSIONS', payload: sessions });
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+      dispatch({ type: 'SET_LOADING', payload: false });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
 
   // Global timer — single interval for all sessions
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -106,6 +120,8 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   }, []);
 
+  // Check in is now handled by BookingContext.checkInBooking() which calls the API.
+  // This just adds the session to local state for immediate UI feedback.
   const checkIn = useCallback((booking: Booking) => {
     const remaining = computeRemaining(booking.endTime);
     const session: ActiveSession = {
@@ -128,12 +144,26 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     dispatch({ type: 'REMOVE_SESSION', payload: bookingId });
   }, []);
 
-  const extend = useCallback((bookingId: string, additionalMinutes: number) => {
-    dispatch({ type: 'EXTEND_SESSION', payload: { bookingId, additionalMinutes } });
+  const extend = useCallback(async (bookingId: string, additionalMinutes: number) => {
+    try {
+      const updated = await sessionApi.extend(bookingId, additionalMinutes);
+      dispatch({ type: 'UPDATE_SESSION', payload: updated });
+    } catch (err) {
+      console.error('Failed to extend session:', err);
+    }
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const sessions = await sessionApi.getAll();
+      dispatch({ type: 'SET_SESSIONS', payload: sessions });
+    } catch (err) {
+      console.error('Failed to refresh sessions:', err);
+    }
   }, []);
 
   return (
-    <SessionContext.Provider value={{ sessions: state.sessions, checkIn, checkOut, extend }}>
+    <SessionContext.Provider value={{ sessions: state.sessions, loading: state.loading, checkIn, checkOut, extend, refreshSessions }}>
       {children}
     </SessionContext.Provider>
   );

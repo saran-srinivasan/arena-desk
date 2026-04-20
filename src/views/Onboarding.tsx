@@ -95,7 +95,7 @@ export const OnboardingView: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validate()) return;
 
     const customer: Customer = {
@@ -108,14 +108,19 @@ export const OnboardingView: React.FC = () => {
       createdAt: new Date().toISOString(),
       totalBookings: 0,
     };
-    addCustomer(customer);
-    success('Customer Onboarded', `${customer.name} has been added successfully.`);
-    setSubmitted(true);
 
-    // Reset after brief display
-    setTimeout(() => {
-      navigate('/customers');
-    }, 1500);
+    try {
+      await addCustomer(customer);
+      success('Customer Onboarded', `${customer.name} has been added successfully.`);
+      setSubmitted(true);
+
+      // Reset after brief display
+      setTimeout(() => {
+        navigate('/customers');
+      }, 1500);
+    } catch (err) {
+      console.error('Onboarding failed:', err);
+    }
   };
 
   const sports: SportType[] = ['Cricket', 'Pickleball', 'Volleyball', 'Basketball', 'Swimming'];
