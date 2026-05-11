@@ -14,6 +14,8 @@ import { BookingsListView } from './views/BookingsList';
 import { CustomersListView } from './views/CustomersList';
 import { ReportsView } from './views/Reports';
 import { SettingsView } from './views/Settings';
+import { MembershipsView } from './views/MembershipsView';
+import { CoachingView } from './views/CoachingView';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 export default function App() {
@@ -32,6 +34,8 @@ export default function App() {
                 <Route path="/sessions" element={<ActiveSessionsView />} />
                 <Route path="/bookings" element={<BookingsListView />} />
                 <Route path="/customers" element={<CustomersListView />} />
+                <Route path="/memberships" element={<MembershipsView />} />
+                <Route path="/coaching" element={<CoachingView />} />
                 <Route path="/onboard" element={<OnboardingView />} />
                 <Route
                   path="/reports"

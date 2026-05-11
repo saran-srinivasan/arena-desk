@@ -1,4 +1,4 @@
-import { Booking, ProposedBooking, Conflict, SportType, Resource } from '../types';
+import { Booking, ProposedBooking, Conflict, SportType, Resource, CoachingBatch } from '../types';
 
 // ── Shared resource configuration ─────────────────────────────
 // Sports that share a single physical court space
@@ -22,6 +22,61 @@ export function timeRangesOverlap(
 }
 
 /**
+ * Generates virtual Booking objects for a given array of CoachingBatches within a specific date range.
+ */
+export function generateVirtualBookingsForBatches(
+  batches: CoachingBatch[],
+  rangeStart: Date,
+  rangeEnd: Date
+): Booking[] {
+  const virtual: Booking[] = [];
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  for (const batch of batches) {
+    if (batch.status === 'Cancelled' || batch.status === 'Completed') continue;
+    
+    const bStart = new Date(batch.startDate);
+    bStart.setHours(0, 0, 0, 0);
+    const bEnd = new Date(batch.endDate);
+    bEnd.setHours(23, 59, 59, 999);
+
+    let curr = new Date(rangeStart);
+    curr.setHours(0, 0, 0, 0);
+
+    while (curr <= rangeEnd) {
+      if (curr >= bStart && curr <= bEnd) {
+        if (batch.scheduleDays.includes(days[curr.getDay()])) {
+          const [sh, sm] = batch.startTime.split(':').map(Number);
+          const [eh, em] = batch.endTime.split(':').map(Number);
+          
+          const startT = new Date(curr);
+          startT.setHours(sh, sm, 0, 0);
+          
+          const endT = new Date(curr);
+          endT.setHours(eh, em, 0, 0);
+          
+          virtual.push({
+            id: `batch-${batch.id}-${curr.getTime()}`,
+            customerId: 'batch',
+            customerName: `Batch: ${batch.name}`,
+            sport: batch.sport,
+            resourceId: batch.resourceId,
+            resourceName: batch.resourceName || 'Resource',
+            startTime: startT.toISOString(),
+            endTime: endT.toISOString(),
+            status: 'Confirmed',
+            createdBy: 'system',
+            createdAt: batch.createdAt
+          });
+        }
+      }
+      curr = new Date(curr.getTime() + 24 * 60 * 600);
+    }
+  }
+  return virtual;
+}
+
+/**
  * Determines if two bookings conflict based on the shared resource rules.
  *
  * DIRECT conflict  → same resource, overlapping time
@@ -30,14 +85,23 @@ export function timeRangesOverlap(
 export function getConflicts(
   proposed: ProposedBooking,
   existingBookings: Booking[],
-  resources: Resource[]
+  resources: Resource[],
+  batches: CoachingBatch[] = []
 ): Conflict[] {
   const conflicts: Conflict[] = [];
+
+  // Add virtual bookings for batches on the proposed date
+  const proposedDate = new Date(proposed.startTime);
+  const virtualBookings = generateVirtualBookingsForBatches(batches, proposedDate, proposedDate);
+  const allBookings = [...existingBookings, ...virtualBookings];
 
   // Find the resource being booked
   const proposedResource = resources.find(r => r.id === proposed.resourceId);
 
-  for (const existing of existingBookings) {
+  let poolOverlappingBookings: Booking[] = [];
+  let poolBatchConflict = false;
+
+  for (const existing of allBookings) {
     // Skip cancelled / completed bookings
     if (existing.status === 'Cancelled' || existing.status === 'Completed') continue;
 
@@ -48,7 +112,16 @@ export function getConflicts(
 
     // Case 1: Direct conflict — same resource
     if (existing.resourceId === proposed.resourceId) {
-      conflicts.push({ existingBooking: existing, type: 'DIRECT' });
+      if (proposedResource?.type === 'Pool') {
+        if (existing.customerId === 'batch') {
+          poolBatchConflict = true;
+          conflicts.push({ existingBooking: existing, type: 'DIRECT' });
+        } else {
+          poolOverlappingBookings.push(existing);
+        }
+      } else {
+        conflicts.push({ existingBooking: existing, type: 'DIRECT' });
+      }
       continue;
     }
 
@@ -62,6 +135,13 @@ export function getConflicts(
       ) {
         conflicts.push({ existingBooking: existing, type: 'CROSS_SPORT' });
       }
+    }
+  }
+
+  if (proposedResource?.type === 'Pool' && !poolBatchConflict) {
+    const maxCap = proposedResource.maxCapacity || 1;
+    if (poolOverlappingBookings.length >= maxCap) {
+      conflicts.push({ existingBooking: poolOverlappingBookings[0], type: 'DIRECT' });
     }
   }
 
@@ -82,7 +162,8 @@ export function getSlotState(
   hour: number,
   date: Date,
   bookings: Booking[],
-  resources: Resource[]
+  resources: Resource[],
+  batches: CoachingBatch[] = []
 ): { state: SlotState; booking?: Booking } {
   const resource = resources.find(r => r.id === resourceId);
   if (!resource) return { state: 'available' };
@@ -100,17 +181,37 @@ export function getSlotState(
   const activeBookings = bookings.filter(
     b => b.status !== 'Cancelled' && b.status !== 'Completed'
   );
+  
+  // Add virtual batch bookings for this specific date
+  const virtualBookings = generateVirtualBookingsForBatches(batches, date, date);
+  const allActiveBookings = [...activeBookings, ...virtualBookings];
 
   // Check direct bookings on this resource
-  for (const b of activeBookings) {
+  let poolOverlappingBookings: Booking[] = [];
+  for (const b of allActiveBookings) {
     if (b.resourceId === resourceId && timeRangesOverlap(slotStartISO, slotEndISO, b.startTime, b.endTime)) {
-      return { state: 'booked', booking: b };
+      if (resource.type === 'Pool') {
+        if (b.customerId === 'batch') {
+          return { state: 'booked', booking: b };
+        } else {
+          poolOverlappingBookings.push(b);
+        }
+      } else {
+        return { state: 'booked', booking: b };
+      }
+    }
+  }
+
+  if (resource.type === 'Pool') {
+    const maxCap = resource.maxCapacity || 1;
+    if (poolOverlappingBookings.length >= maxCap) {
+      return { state: 'booked', booking: poolOverlappingBookings[0] };
     }
   }
 
   // Check cross-sport blocking (shared group)
   if (resource.sharedGroup && resource.supportedSports.some(s => COURT_SPORTS.includes(s))) {
-    for (const b of activeBookings) {
+    for (const b of allActiveBookings) {
       if (b.resourceId === resourceId) continue; // already checked above
       const bResource = resources.find(r => r.id === b.resourceId);
       if (

@@ -32,6 +32,27 @@ export class ResourceController {
       next(err);
     }
   }
+
+  async create(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await resourceService.create(req.body);
+      res.status(201).json({ success: true, data });
+    } catch (err) { next(err); }
+  }
+
+  async update(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await resourceService.update(req.params.id, req.body);
+      res.json({ success: true, data });
+    } catch (err) { next(err); }
+  }
+
+  async delete(req: Request, res: Response, next: NextFunction) {
+    try {
+      await resourceService.delete(req.params.id);
+      res.json({ success: true, data: { deleted: true } });
+    } catch (err) { next(err); }
+  }
 }
 
 export const resourceController = new ResourceController();

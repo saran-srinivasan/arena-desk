@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Calendar, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { X, Calendar, Clock, AlertTriangle, CheckCircle2, Users } from 'lucide-react';
 import { useBookings } from '../contexts/BookingContext';
 import { useConflict } from '../hooks/useConflict';
 import { SportType, ProposedBooking, BookingStatus, Booking } from '../types';
@@ -13,9 +13,10 @@ interface BookingFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   editBookingId?: string;
+  initialDate?: Date;
 }
 
-export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onClose, editBookingId }) => {
+export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onClose, editBookingId, initialDate }) => {
   const { bookings, customers, resources, createBooking, updateBooking, generateBookingId } = useBookings();
   const { checkConflicts } = useConflict();
   const { user } = useAuth();
@@ -53,12 +54,18 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onCl
       setCustomerId('');
       setSport('Cricket');
       setResourceId('');
-      setDate(format(new Date(), 'yyyy-MM-dd'));
-      setStartTime('10:00');
-      setEndTime('11:00');
+      
+      const baseDate = initialDate || new Date();
+      // Round to next 30 mins for nicer defaults if it's current time, but let's just use the date given
+      // End time is 1 hour plus
+      const endD = addHours(baseDate, 1);
+      
+      setDate(format(baseDate, 'yyyy-MM-dd'));
+      setStartTime(format(baseDate, 'HH:mm'));
+      setEndTime(format(endD, 'HH:mm'));
       setNotes('');
     }
-  }, [isOpen, editingBooking]);
+  }, [isOpen, editingBooking, initialDate]);
 
   // Select first available resource when sport changes (only if not editing)
   useEffect(() => {
@@ -136,7 +143,7 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onCl
           notes,
           createdBy: user.name,
           createdAt: new Date().toISOString(),
-          priceCents: 5000,
+          price: 5000,
         };
 
         await createBooking(newBooking);
@@ -239,11 +246,18 @@ export const BookingFormModal: React.FC<BookingFormModalProps> = ({ isOpen, onCl
                     required
                     disabled={availableResources.length === 0}
                   >
-                    {availableResources.length === 0 && <option value="" disabled>No resources for {sport}</option>}
                     {availableResources.map(r => (
-                      <option key={r.id} value={r.id}>{r.name} ({r.subType})</option>
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.subType}){r.maxCapacity && r.maxCapacity > 1 ? ` — Cap: ${r.maxCapacity}` : ''}
+                      </option>
                     ))}
                   </select>
+                  {resourceId && resources.find(r => r.id === resourceId)?.maxCapacity && (resources.find(r => r.id === resourceId)?.maxCapacity || 0) > 1 && (
+                    <div className="flex items-center gap-1.5 px-1 mt-1 text-[10px] font-bold text-primary animate-in fade-in slide-in-from-top-1">
+                      <Users className="w-3 h-3" />
+                      Shared resource: up to {resources.find(r => r.id === resourceId)?.maxCapacity} people
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

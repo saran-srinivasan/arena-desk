@@ -1,18 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Search, Filter, ArrowDownNarrowWide, Radio } from 'lucide-react';
 import { useSessions } from '../contexts/SessionContext';
 import { useBookings } from '../contexts/BookingContext';
 import { useToast } from '../contexts/ToastContext';
 import { ActiveSessionCard } from '../components/ActiveSessionCard';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { CheckoutModal } from '../components/CheckoutModal';
+import { ActiveSession } from '../types';
 
 export const ActiveSessionsView: React.FC = () => {
   const { sessions, checkOut, extend } = useSessions();
-  const { completeBooking } = useBookings();
+  const { completeBooking, updateBooking } = useBookings();
   const { success } = useToast();
   const [searchTerm, setSearchTerm] = React.useState('');
-  const [checkoutTarget, setCheckoutTarget] = React.useState<string | null>(null);
+  const [checkoutTarget, setCheckoutTarget] = React.useState<ActiveSession | null>(null);
 
   const filtered = sessions.filter(s => {
     if (!searchTerm) return true;
@@ -24,11 +25,12 @@ export const ActiveSessionsView: React.FC = () => {
     );
   });
 
-  const handleCheckOut = async (bookingId: string) => {
+  const handleCheckOut = async (bookingId: string, finalPrice: number) => {
     try {
+      await updateBooking(bookingId, { price: finalPrice });
       checkOut(bookingId);
       await completeBooking(bookingId);
-      success('Session Completed', 'Customer has been checked out successfully.');
+      success('Session Completed', `Customer checked out successfully. Collected ₹${finalPrice}.`);
     } catch (err) {
       console.error('Check-out failed:', err);
     }
@@ -78,7 +80,7 @@ export const ActiveSessionsView: React.FC = () => {
             key={session.bookingId}
             session={session}
             onExtend={handleExtend}
-            onCheckOut={() => setCheckoutTarget(session.bookingId)}
+            onCheckOut={() => setCheckoutTarget(session)}
           />
         ))}
       </div>
@@ -90,13 +92,10 @@ export const ActiveSessionsView: React.FC = () => {
         </div>
       )}
 
-      <ConfirmDialog
+      <CheckoutModal
         isOpen={checkoutTarget !== null}
-        title="Check Out Session"
-        message="Are you sure you want to end this session? The resource will become available for new bookings immediately."
-        confirmText="Complete Session"
-        type="warning"
-        onConfirm={() => checkoutTarget && handleCheckOut(checkoutTarget)}
+        session={checkoutTarget}
+        onConfirm={handleCheckOut}
         onClose={() => setCheckoutTarget(null)}
       />
     </div>

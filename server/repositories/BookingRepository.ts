@@ -2,11 +2,25 @@ import { query, execute, getPool } from '../database/connection.ts';
 import type { Booking, BookingRow, BookingStatus } from '../types/index.ts';
 import type { RowDataPacket } from 'mysql2/promise';
 
+// ── Helpers ──────────────────────────────────────────────────
+function toISO(val: Date | string): string {
+  if (typeof val === 'string') {
+    // MySQL DATETIME string (YYYY-MM-DD HH:mm:ss) is parsed as local time by new Date()
+    return new Date(val).toISOString();
+  }
+  return val.toISOString();
+}
+
+function toMySQLDateTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  
+  // Format as YYYY-MM-DD HH:mm:ss using local time components
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // ── Row → Model Mapper ───────────────────────────────────────
 function toBooking(row: BookingRow & RowDataPacket): Booking {
-  const toISO = (val: Date | string) =>
-    typeof val === 'string' ? new Date(val).toISOString() : val.toISOString();
-
   return {
     id: row.id,
     customerId: row.customer_id,
@@ -20,7 +34,7 @@ function toBooking(row: BookingRow & RowDataPacket): Booking {
     notes: row.notes ?? undefined,
     createdBy: row.created_by,
     createdAt: toISO(row.created_at),
-    priceCents: row.price_cents,
+    price: row.price,
   };
 }
 
@@ -93,7 +107,7 @@ export class BookingRepository {
          AND status NOT IN ('Cancelled', 'Completed')
          AND start_time < ?
          AND end_time > ?`;
-    const params: unknown[] = [resourceId, endTime, startTime];
+    const params: unknown[] = [resourceId, toMySQLDateTime(endTime), toMySQLDateTime(startTime)];
 
     if (ignoreBookingId) {
       sql += ' AND id != ?';
@@ -120,7 +134,7 @@ export class BookingRepository {
          AND b.status NOT IN ('Cancelled', 'Completed')
          AND b.start_time < ?
          AND b.end_time > ?`;
-    const params: unknown[] = [sharedGroup, endTime, startTime];
+    const params: unknown[] = [sharedGroup, toMySQLDateTime(endTime), toMySQLDateTime(startTime)];
 
     if (ignoreBookingId) {
       sql += ' AND b.id != ?';
@@ -132,16 +146,16 @@ export class BookingRepository {
   }
 
   async create(booking: Booking): Promise<Booking> {
-    const startDT = new Date(booking.startTime).toISOString().slice(0, 19).replace('T', ' ');
-    const endDT = new Date(booking.endTime).toISOString().slice(0, 19).replace('T', ' ');
+    const startDT = toMySQLDateTime(booking.startTime);
+    const endDT = toMySQLDateTime(booking.endTime);
 
     await execute(
-      `INSERT INTO bookings (id, customer_id, customer_name, sport, resource_id, resource_name, start_time, end_time, status, notes, created_by, price_cents)
+      `INSERT INTO bookings (id, customer_id, customer_name, sport, resource_id, resource_name, start_time, end_time, status, notes, created_by, price)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         booking.id, booking.customerId, booking.customerName, booking.sport,
         booking.resourceId, booking.resourceName, startDT, endDT,
-        booking.status, booking.notes ?? null, booking.createdBy, booking.priceCents ?? 0,
+        booking.status, booking.notes ?? null, booking.createdBy, booking.price ?? 0,
       ],
     );
     return (await this.findById(booking.id))!;
@@ -161,15 +175,15 @@ export class BookingRepository {
       endTime: 'end_time',
       status: 'status',
       notes: 'notes',
-      priceCents: 'price_cents',
+      price: 'price',
     };
 
     for (const [key, col] of Object.entries(fieldMap)) {
       if (key in patch && patch[key as keyof Booking] !== undefined) {
         let val = patch[key as keyof Booking];
-        // Convert ISO dates to MySQL DATETIME
+        // Convert ISO dates to MySQL DATETIME (local)
         if ((key === 'startTime' || key === 'endTime') && typeof val === 'string') {
-          val = new Date(val).toISOString().slice(0, 19).replace('T', ' ');
+          val = toMySQLDateTime(val);
         }
         sets.push(`${col} = ?`);
         params.push(val);

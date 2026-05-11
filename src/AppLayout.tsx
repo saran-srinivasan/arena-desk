@@ -13,6 +13,8 @@ const viewTitles: Record<string, string> = {
   '/sessions': 'Active Sessions',
   '/bookings': 'Bookings',
   '/customers': 'Customers',
+  '/memberships': 'Membership Management',
+  '/coaching': 'Coaching & Batches',
   '/onboard': 'New Customer Onboarding',
   '/reports': 'Reports & Analytics',
   '/settings': 'Settings',
@@ -23,7 +25,7 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const { user, setRole } = useAuth();
   
-  const [bookingModalState, setBookingModalState] = React.useState<{isOpen: boolean, editBookingId?: string}>({isOpen: false});
+  const [bookingModalState, setBookingModalState] = React.useState<{isOpen: boolean, editBookingId?: string, initialDate?: Date}>({isOpen: false});
   const [listModalState, setListModalState] = React.useState<{isOpen: boolean, date: Date | null, resourceId?: string}>({isOpen: false, date: null});
 
   const activeView = location.pathname.replace('/', '') || 'dashboard';
@@ -54,7 +56,7 @@ export default function AppLayout() {
               className="flex-1 flex flex-col overflow-hidden"
             >
               <Outlet context={{ 
-                openBookingModal: (editBookingId?: string) => setBookingModalState({isOpen: true, editBookingId}),
+                openBookingModal: (editBookingId?: string, initialDate?: Date) => setBookingModalState({isOpen: true, editBookingId, initialDate}),
                 openListModal: (date: Date, resourceId?: string) => setListModalState({isOpen: true, date, resourceId})
               }} />
             </motion.div>
@@ -81,6 +83,7 @@ export default function AppLayout() {
       <BookingFormModal 
         isOpen={bookingModalState.isOpen} 
         editBookingId={bookingModalState.editBookingId}
+        initialDate={bookingModalState.initialDate}
         onClose={() => setBookingModalState({isOpen: false})} 
       />
       <BookingListModal

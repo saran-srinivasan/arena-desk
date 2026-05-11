@@ -10,12 +10,23 @@ function deriveSeverity(remainingSeconds: number): SessionSeverity {
   return 'green';
 }
 
-function toSession(row: SessionRow & RowDataPacket): ActiveSession {
-  const toISO = (val: Date | string) =>
-    typeof val === 'string' ? new Date(val).toISOString() : val.toISOString();
+function toISO(val: Date | string): string {
+  if (typeof val === 'string') {
+    return new Date(val).toISOString();
+  }
+  return val.toISOString();
+}
 
+function toMySQLDateTime(date: Date | string): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function toSession(row: SessionRow & RowDataPacket): ActiveSession {
+  const startTime = toISO(row.start_time);
   const endTime = toISO(row.end_time);
-  const remaining = Math.floor((new Date(endTime).getTime() - Date.now()) / 1000);
+  const remaining = Math.floor((new Date(endTime).getTime() - Date.now()));
 
   return {
     bookingId: row.booking_id,
@@ -24,7 +35,7 @@ function toSession(row: SessionRow & RowDataPacket): ActiveSession {
     sport: row.sport,
     resourceId: row.resource_id,
     resourceName: row.resource_name,
-    startTime: toISO(row.start_time),
+    startTime,
     endTime,
     remainingSeconds: remaining,
     isOverstay: remaining < 0,
@@ -59,14 +70,12 @@ export class SessionRepository {
     startTime: string;
     endTime: string;
   }): Promise<ActiveSession> {
-    const fmt = (iso: string) => new Date(iso).toISOString().slice(0, 19).replace('T', ' ');
-
     await execute(
       `INSERT INTO active_sessions (booking_id, customer_id, customer_name, sport, resource_id, resource_name, start_time, end_time)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         session.bookingId, session.customerId, session.customerName, session.sport,
-        session.resourceId, session.resourceName, fmt(session.startTime), fmt(session.endTime),
+        session.resourceId, session.resourceName, toMySQLDateTime(session.startTime), toMySQLDateTime(session.endTime),
       ],
     );
     return (await this.findByBookingId(session.bookingId))!;
@@ -81,10 +90,9 @@ export class SessionRepository {
   }
 
   async updateEndTime(bookingId: string, newEndTime: string): Promise<ActiveSession | null> {
-    const fmt = (iso: string) => new Date(iso).toISOString().slice(0, 19).replace('T', ' ');
     await execute(
       'UPDATE active_sessions SET end_time = ? WHERE booking_id = ?',
-      [fmt(newEndTime), bookingId],
+      [toMySQLDateTime(newEndTime), bookingId],
     );
     return this.findByBookingId(bookingId);
   }

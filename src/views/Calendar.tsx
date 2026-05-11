@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PlusCircle, Calendar as CalendarIcon, Ban, ChevronLeft, ChevronRight, Lock, Clock, Users, Zap } from 'lucide-react';
 import { useBookings } from '../contexts/BookingContext';
-import { getSlotState } from '../lib/conflictEngine';
+import { getSlotState, generateVirtualBookingsForBatches } from '../lib/conflictEngine';
 import { cn } from '../lib/utils';
 import { format, addDays, subDays, startOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth, addMonths, subMonths, isToday as isDateToday } from 'date-fns';
 import { useOutletContext } from 'react-router-dom';
@@ -28,7 +28,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export const CalendarView: React.FC = () => {
-  const { bookings, resources } = useBookings();
+  const { bookings, resources, coachingBatches } = useBookings();
   const [selectedDate, setSelectedDate] = React.useState(new Date());
   const [calendarView, setCalendarView] = React.useState<CalendarViewType>('day');
   const [direction, setDirection] = React.useState(0); // -1 back, 1 forward for animation
@@ -111,7 +111,21 @@ export const CalendarView: React.FC = () => {
   }, [handlePrev, handleNext, jumpToToday]);
 
   // ── Helper: active bookings ──────────────────────────────────
-  const activeBookings = bookings.filter(b => b.status !== 'Cancelled' && b.status !== 'Completed');
+  const activeBookings = React.useMemo(() => {
+    let startD = startOfDay(selectedDate);
+    let endD = addDays(startOfDay(selectedDate), 1);
+    if (calendarView === 'week') {
+      startD = startOfWeek(selectedDate, { weekStartsOn: 1 });
+      endD = addDays(startD, 7);
+    } else if (calendarView === 'month') {
+      startD = startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 });
+      endD = endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 });
+    }
+    
+    const valid = bookings.filter(b => b.status !== 'Cancelled' && b.status !== 'Completed');
+    const virtual = generateVirtualBookingsForBatches(coachingBatches || [], startD, endD);
+    return [...valid, ...virtual];
+  }, [bookings, coachingBatches, selectedDate, calendarView]);
 
   const dayStart = startOfDay(selectedDate);
   const isTodaySelected = isDateToday(selectedDate);
@@ -156,8 +170,13 @@ export const CalendarView: React.FC = () => {
             </div>
 
             {resources.map(res => (
-              <div key={res.id} className="flex-1 min-w-[140px] text-center border-r border-border h-full flex flex-col justify-center px-2">
-                <span className="text-xs font-bold text-on-surface truncate">{res.name}</span>
+              <div key={res.id} className="flex-1 min-w-[140px] text-center border-r border-border h-full flex flex-col justify-center px-2 relative">
+                <div className="flex items-center justify-center gap-1">
+                  <span className="text-xs font-bold text-on-surface truncate">{res.name}</span>
+                  {res.maxCapacity && res.maxCapacity > 1 && (
+                    <span className="text-[8px] bg-primary/20 text-primary px-1 rounded-full font-black">x{res.maxCapacity}</span>
+                  )}
+                </div>
                 <span className="text-[9px] text-on-surface-variant/70 uppercase tracking-tight">{res.subType}</span>
               </div>
             ))}
@@ -201,7 +220,7 @@ export const CalendarView: React.FC = () => {
                   });
 
                   // Check slot state
-                  const { state } = getSlotState(res.id, hour, dayStart, bookings, resources);
+                  const { state } = getSlotState(res.id, hour, dayStart, bookings, resources, coachingBatches);
                   const isBlocked = state === 'blocked';
 
                   return (
@@ -214,7 +233,7 @@ export const CalendarView: React.FC = () => {
                           : "hover:bg-hover-overlay cursor-pointer"
                       )}
                       onClick={() => {
-                        if (!isBlocked && slotBookings.length === 0) openBookingModal();
+                        if (!isBlocked && slotBookings.length === 0) openBookingModal(undefined, slotDate);
                       }}
                     >
                       {/* Hover hint */}
@@ -231,7 +250,7 @@ export const CalendarView: React.FC = () => {
                       )}
 
                       {/* Booking chips */}
-                      {slotBookings.map(b => {
+                      {slotBookings.map((b, idx) => {
                         const bStart = new Date(b.startTime);
                         const bEnd = new Date(b.endTime);
                         const durationSlots = ((bEnd.getTime() - bStart.getTime()) / (1000 * 60 * 30));
@@ -241,6 +260,11 @@ export const CalendarView: React.FC = () => {
                         const startStr = format(bStart, 'h:mm a');
                         const endStr = format(bEnd, 'h:mm a');
 
+                        // Handle overlapping bookings for multi-capacity resources
+                        const count = slotBookings.length;
+                        const widthPct = 100 / count;
+                        const leftPct = idx * widthPct;
+
                         return (
                           <motion.div
                             key={b.id}
@@ -249,15 +273,21 @@ export const CalendarView: React.FC = () => {
                             transition={{ duration: 0.2 }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              if (b.id.startsWith('batch-')) return;
                               openBookingModal(b.id);
                             }}
                             className={cn(
-                              "absolute left-1 right-1 top-[2px] rounded-lg shadow-lg z-10 overflow-hidden cursor-pointer",
+                              "absolute top-[2px] rounded-lg shadow-lg z-10 overflow-hidden cursor-pointer",
                               "bg-gradient-to-br text-white",
                               sportColor.bg,
                               "hover:brightness-110 hover:shadow-xl transition-all"
                             )}
-                            style={{ height: chipHeight }}
+                            style={{ 
+                              height: chipHeight,
+                              left: `${leftPct}%`,
+                              width: `calc(${widthPct}% - 4px)`,
+                              marginLeft: '2px'
+                            }}
                           >
                             <div className="p-2 h-full flex flex-col justify-between min-w-0">
                               <div className="min-w-0">
@@ -360,7 +390,12 @@ export const CalendarView: React.FC = () => {
           {resources.map((res) => (
             <div key={res.id} className="flex min-h-[120px] group relative">
               <div className="w-[140px] px-4 h-full flex flex-col justify-center bg-surface-container-high/80 sticky left-0 z-30 shadow-[4px_0_16px_-4px_rgba(0,0,0,0.2)] border-r border-border-strong shrink-0 py-3">
-                <span className="text-sm font-bold text-on-surface">{res.name}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-on-surface truncate">{res.name}</span>
+                  {res.maxCapacity && res.maxCapacity > 1 && (
+                    <span className="text-[8px] bg-primary/20 text-primary px-1 rounded-full font-black">x{res.maxCapacity}</span>
+                  )}
+                </div>
                 <span className="text-[9px] text-on-surface-variant/60 uppercase font-bold tracking-tight mt-0.5">{res.subType}</span>
               </div>
 
@@ -376,7 +411,15 @@ export const CalendarView: React.FC = () => {
                         "flex-1 border-r border-border p-1.5 flex flex-col gap-1 overflow-y-auto calendar-scroll group/cell transition-colors cursor-pointer",
                         isToday ? "bg-primary/[0.03]" : "hover:bg-hover-overlay"
                       )}
-                      onClick={() => dayBookings.length > 0 ? openListModal(d, res.id) : openBookingModal()}
+                      onClick={() => {
+                        if (dayBookings.length > 0) {
+                          openListModal(d, res.id);
+                        } else {
+                          const targetDate = new Date(d);
+                          targetDate.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
+                          openBookingModal(undefined, targetDate);
+                        }
+                      }}
                     >
                       {dayBookings.map(b => {
                         const sportColor = getSportColor(b.sport);
@@ -385,7 +428,11 @@ export const CalendarView: React.FC = () => {
                             key={b.id}
                             initial={{ opacity: 0, y: 4 }}
                             animate={{ opacity: 1, y: 0 }}
-                            onClick={(e) => { e.stopPropagation(); openBookingModal(b.id); }}
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (b.id.startsWith('batch-')) return;
+                              openBookingModal(b.id); 
+                            }}
                             className={cn(
                               "text-[10px] px-2 py-1.5 rounded-lg flex flex-col gap-0.5 border cursor-pointer transition-all hover:brightness-125",
                               sportColor.bgLight, sportColor.border, sportColor.text
@@ -447,7 +494,15 @@ export const CalendarView: React.FC = () => {
               !isInMonth ? "bg-surface-container-lowest/20 opacity-40" : "hover:bg-hover-overlay",
               isToday && "bg-primary/[0.04] ring-1 ring-inset ring-primary/20"
             )}
-            onClick={() => dayBookings.length > 0 ? openListModal(cloneDay) : openBookingModal()}
+            onClick={() => {
+              if (dayBookings.length > 0) {
+                openListModal(cloneDay);
+              } else {
+                const targetDate = new Date(cloneDay);
+                targetDate.setHours(new Date().getHours(), new Date().getMinutes(), 0, 0);
+                openBookingModal(undefined, targetDate);
+              }
+            }}
           >
             {/* Date header */}
             <div className="flex items-center justify-between mb-1.5">
@@ -481,7 +536,11 @@ export const CalendarView: React.FC = () => {
                 return (
                   <div
                     key={b.id}
-                    onClick={(e) => { e.stopPropagation(); openBookingModal(b.id); }}
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      if (b.id.startsWith('batch-')) return;
+                      openBookingModal(b.id); 
+                    }}
                     className={cn(
                       "text-[9px] px-1.5 py-[3px] rounded flex items-center gap-1.5 transition-all cursor-pointer",
                       "hover:brightness-125 border-l-2",

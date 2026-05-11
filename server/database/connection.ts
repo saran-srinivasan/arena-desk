@@ -16,6 +16,7 @@ export function getPool(): mysql.Pool {
       queueLimit: config.db.queueLimit,
       // Return dates as strings to avoid timezone issues
       dateStrings: true,
+      multipleStatements: true,
     });
   }
   return pool;

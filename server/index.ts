@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
 import { config } from './config.ts';
 import { getPool, closePool } from './database/connection.ts';
 import { seedDatabase } from './database/seed.ts';
@@ -30,6 +32,15 @@ async function start() {
     const pool = getPool();
     const conn = await pool.getConnection();
     console.log('  ✓ Database connected');
+
+    // Initialize schema if not exists
+    const schemaPath = path.join(process.cwd(), 'server', 'database', 'schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      await conn.query(schemaSql);
+      console.log('  ✓ Database schema initialized');
+    }
+
     conn.release();
 
     // Seed data

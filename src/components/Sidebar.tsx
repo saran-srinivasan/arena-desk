@@ -11,7 +11,9 @@ import {
   Settings,
   HelpCircle,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard,
+  GraduationCap
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -28,6 +30,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, role
     { id: 'sessions', label: 'Active Sessions', icon: Radio },
     { id: 'bookings', label: 'Bookings', icon: Ticket },
     { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'memberships', label: 'Memberships', icon: CreditCard },
+    { id: 'coaching', label: 'Coaching', icon: GraduationCap },
     { id: 'onboard', label: 'Onboard User', icon: Building2 },
   ];
 
@@ -92,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange, role
       <div className="mt-auto px-4">
         <div className="bg-white/5 p-4 rounded-xl flex items-center gap-3 border border-primary/10">
           <img
-            src="https://picsum.photos/seed/alex/100/100"
+            src="https://picsum.photos/seed/alex"
             alt="User"
             className="w-10 h-10 rounded-full border-2 border-primary/30"
             referrerPolicy="no-referrer"

@@ -9,7 +9,7 @@ interface CreateBookingDto {
   endTime: string;
   notes?: string;
   createdBy: string;
-  priceCents?: number;
+  price?: number;
 }
 
 interface UpdateBookingDto {
@@ -19,7 +19,7 @@ interface UpdateBookingDto {
   startTime?: string;
   endTime?: string;
   notes?: string;
-  priceCents?: number;
+  price?: number;
 }
 
 export const bookingApi = {

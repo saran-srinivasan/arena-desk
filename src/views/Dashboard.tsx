@@ -26,7 +26,7 @@ export const DashboardView: React.FC = () => {
   // Derive KPIs from real data
   const totalRevenue = bookings
     .filter(b => b.status !== 'Cancelled')
-    .reduce((sum, b) => sum + (b.priceCents || 0), 0);
+    .reduce((sum, b) => sum + (b.price || 0), 0);
 
   const avgBooking = bookings.filter(b => b.status !== 'Cancelled').length > 0
     ? totalRevenue / bookings.filter(b => b.status !== 'Cancelled').length
@@ -41,11 +41,11 @@ export const DashboardView: React.FC = () => {
 
   // Utilization: active + confirmed as % of total non-cancelled
   const activeTotal = bookings.filter(b => b.status === 'Active' || b.status === 'Confirmed').length;
-  const utilPct = bookings.length > 0 ? Math.round((activeTotal / bookings.filter(b => b.status !== 'Cancelled').length) * 100) : 0;
+  const utilPct = bookings.length > 0 ? Math.round((activeTotal / bookings.filter(b => b.status !== 'Cancelled').length)) : 0;
 
   const kpis = [
-    { label: 'Total Revenue', value: `$${(totalRevenue / 100).toLocaleString()}`, trend: 'From bookings', icon: TrendingUp, color: 'primary' },
-    { label: 'Avg. Booking', value: `$${(avgBooking / 100).toFixed(2)}`, trend: 'Per session', icon: Receipt, color: 'secondary' },
+    { label: 'Total Revenue', value: `₹${(totalRevenue).toLocaleString()}`, trend: 'From bookings', icon: TrendingUp, color: 'primary' },
+    { label: 'Avg. Booking', value: `₹${(avgBooking).toFixed(2)}`, trend: 'Per session', icon: Receipt, color: 'secondary' },
     { label: 'Popular Sport', value: popularSport?.[0] || 'N/A', trend: `${popularSport?.[1] || 0} bookings`, icon: Star, color: 'tertiary' },
     { label: 'Utilization', value: `${utilPct}%`, trend: `${activeTotal} active slots`, icon: Activity, color: 'primary' },
   ];

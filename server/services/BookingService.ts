@@ -84,7 +84,7 @@ export class BookingService {
       notes: dto.notes,
       createdBy: dto.createdBy,
       createdAt: new Date().toISOString(),
-      priceCents: dto.priceCents ?? 0,
+      price: dto.price ?? 0,
     };
 
     const created = await bookingRepository.create(booking);

@@ -8,16 +8,16 @@ export const ReportsView: React.FC = () => {
 
   const totalRevenue = bookings
     .filter(b => b.status !== 'Cancelled')
-    .reduce((sum, b) => sum + (b.priceCents || 0), 0);
+    .reduce((sum, b) => sum + (b.price || 0), 0);
 
   const completedCount = bookings.filter(b => b.status === 'Completed').length;
   const activeCount = bookings.filter(b => b.status === 'Active').length;
 
   const cards = [
-    { label: 'Total Revenue', value: `$${(totalRevenue / 100).toLocaleString()}`, icon: DollarSign, color: 'primary' },
+    { label: 'Total Revenue', value: `$${(totalRevenue).toLocaleString()}`, icon: DollarSign, color: 'primary' },
     { label: 'Completed Sessions', value: completedCount.toString(), icon: TrendingUp, color: 'primary' },
     { label: 'Active Sessions', value: activeCount.toString(), icon: Activity, color: 'tertiary' },
-    { label: 'Avg. Booking Value', value: bookings.length > 0 ? `$${((totalRevenue / 100) / bookings.filter(b => b.status !== 'Cancelled').length).toFixed(2)}` : '$0', icon: BarChart3, color: 'secondary' },
+    { label: 'Avg. Booking Value', value: bookings.length > 0 ? `$${((totalRevenue) / bookings.filter(b => b.status !== 'Cancelled').length).toFixed(2)}` : '$0', icon: BarChart3, color: 'secondary' },
   ];
 
   return (

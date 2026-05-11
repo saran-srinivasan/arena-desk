@@ -21,7 +21,7 @@ export class SessionService {
 
     const session = await this.getByBookingId(bookingId);
     const currentEnd = new Date(session.endTime);
-    const newEnd = new Date(currentEnd.getTime() + additionalMinutes * 60 * 1000);
+    const newEnd = new Date(currentEnd.getTime() + additionalMinutes * 600);
     const newEndISO = newEnd.toISOString();
 
     // Update both session and booking end times

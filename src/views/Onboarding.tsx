@@ -4,13 +4,14 @@ import { Camera, RefreshCcw, CheckCircle2, Info, UserPlus, ShieldAlert } from 'l
 import { cn } from '../lib/utils';
 import { useBookings } from '../contexts/BookingContext';
 import { useToast } from '../contexts/ToastContext';
-import { SportType, Customer } from '../types';
+import { SportType, Customer, CustomerType } from '../types';
 import { useNavigate } from 'react-router-dom';
 
 interface FormState {
   name: string;
   phone: string;
   email: string;
+  customerType: CustomerType;
   preferredSport: SportType;
 }
 
@@ -25,6 +26,7 @@ export const OnboardingView: React.FC = () => {
     name: '',
     phone: '',
     email: '',
+    customerType: 'Walk-in',
     preferredSport: 'Cricket',
   });
   const [errors, setErrors] = React.useState<Partial<Record<keyof FormState, string>>>({});
@@ -103,6 +105,7 @@ export const OnboardingView: React.FC = () => {
       name: formState.name,
       phone: formState.phone,
       email: formState.email,
+      customerType: formState.customerType,
       preferredSport: formState.preferredSport,
       photoUrl: photoUrl || undefined,
       createdAt: new Date().toISOString(),
@@ -124,6 +127,7 @@ export const OnboardingView: React.FC = () => {
   };
 
   const sports: SportType[] = ['Cricket', 'Pickleball', 'Volleyball', 'Basketball', 'Swimming'];
+  const customerTypes: CustomerType[] = ['Walk-in', 'Member', 'Student'];
 
   if (submitted) {
     return (
@@ -201,6 +205,27 @@ export const OnboardingView: React.FC = () => {
                     placeholder="customer@domain.com"
                   />
                   {errors.email && <p className="text-[10px] text-error font-bold px-1">{errors.email}</p>}
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <label className="text-xs font-bold uppercase tracking-wider text-on-surface-variant px-1 block">Customer Type</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {customerTypes.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => updateField('customerType', type)}
+                        className={cn(
+                          "flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all group",
+                          formState.customerType === type
+                            ? "bg-primary-container/10 border-primary text-primary"
+                            : "bg-surface-container-high border-transparent hover:border-border-strong text-on-surface-variant"
+                        )}
+                      >
+                        <span className="text-[11px] font-bold">{type}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-4 pt-4">

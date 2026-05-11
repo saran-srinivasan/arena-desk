@@ -1,5 +1,5 @@
 import { customerRepository } from '../repositories/CustomerRepository.ts';
-import type { Customer, CreateCustomerDto } from '../types/index.ts';
+import type { Customer, CreateCustomerDto, UpdateCustomerDto, CustomerType } from '../types/index.ts';
 import { NotFoundError, ValidationError } from '../types/index.ts';
 
 export class CustomerService {
@@ -13,24 +13,25 @@ export class CustomerService {
     return customer;
   }
 
+  async getByType(type: CustomerType): Promise<Customer[]> {
+    return customerRepository.findByType(type);
+  }
+
   async search(q: string): Promise<Customer[]> {
     if (!q || q.trim().length === 0) return customerRepository.findAll();
     return customerRepository.search(q.trim());
   }
 
   async create(dto: CreateCustomerDto): Promise<Customer> {
-    // Validate required fields
     if (!dto.name?.trim()) throw new ValidationError('Name is required');
     if (!dto.phone?.trim()) throw new ValidationError('Phone is required');
     if (!dto.email?.trim()) throw new ValidationError('Email is required');
 
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(dto.email)) {
       throw new ValidationError('Invalid email format');
     }
 
-    // Check email uniqueness
     const existing = await customerRepository.findByEmail(dto.email);
     if (existing) {
       throw new ValidationError(`A customer with email '${dto.email}' already exists`);
@@ -38,6 +39,28 @@ export class CustomerService {
 
     const id = `c-${Date.now()}`;
     return customerRepository.create(id, dto);
+  }
+
+  async update(id: string, dto: UpdateCustomerDto): Promise<Customer> {
+    const existing = await customerRepository.findById(id);
+    if (!existing) throw new NotFoundError('Customer', id);
+
+    if (dto.email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(dto.email)) throw new ValidationError('Invalid email format');
+      const byEmail = await customerRepository.findByEmail(dto.email);
+      if (byEmail && byEmail.id !== id) {
+        throw new ValidationError(`A customer with email '${dto.email}' already exists`);
+      }
+    }
+
+    return customerRepository.update(id, dto);
+  }
+
+  async delete(id: string): Promise<void> {
+    const existing = await customerRepository.findById(id);
+    if (!existing) throw new NotFoundError('Customer', id);
+    await customerRepository.delete(id);
   }
 }
 

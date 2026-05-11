@@ -10,13 +10,14 @@ interface BookingState {
   bookings: Booking[];
   customers: Customer[];
   resources: Resource[];
+  coachingBatches: import('../types').CoachingBatch[];
   loading: boolean;
   error: string | null;
 }
 
 // ── Actions ───────────────────────────────────────────────────
 type BookingAction =
-  | { type: 'SET_DATA'; payload: { bookings: Booking[]; customers: Customer[]; resources: Resource[] } }
+  | { type: 'SET_DATA'; payload: { bookings: Booking[]; customers: Customer[]; resources: Resource[]; coachingBatches: import('../types').CoachingBatch[] } }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
   | { type: 'SET_BOOKINGS'; payload: Booking[] }
@@ -26,7 +27,9 @@ type BookingAction =
   | { type: 'CANCEL_BOOKING'; payload: { id: string; booking: Booking } }
   | { type: 'CHECKIN_BOOKING'; payload: { id: string; booking: Booking } }
   | { type: 'COMPLETE_BOOKING'; payload: { id: string; booking: Booking } }
-  | { type: 'ADD_CUSTOMER'; payload: Customer };
+  | { type: 'ADD_CUSTOMER'; payload: Customer }
+  | { type: 'UPDATE_CUSTOMER'; payload: Customer }
+  | { type: 'DELETE_CUSTOMER'; payload: string };
 
 function bookingReducer(state: BookingState, action: BookingAction): BookingState {
   switch (action.type) {
@@ -36,6 +39,7 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
         bookings: action.payload.bookings,
         customers: action.payload.customers,
         resources: action.payload.resources,
+        coachingBatches: action.payload.coachingBatches,
         loading: false,
         error: null,
       };
@@ -90,6 +94,12 @@ function bookingReducer(state: BookingState, action: BookingAction): BookingStat
     case 'ADD_CUSTOMER':
       return { ...state, customers: [...state.customers, action.payload] };
 
+    case 'UPDATE_CUSTOMER':
+      return { ...state, customers: state.customers.map(c => c.id === action.payload.id ? action.payload : c) };
+
+    case 'DELETE_CUSTOMER':
+      return { ...state, customers: state.customers.filter(c => c.id !== action.payload) };
+
     default:
       return state;
   }
@@ -100,6 +110,7 @@ interface BookingContextValue {
   bookings: Booking[];
   customers: Customer[];
   resources: Resource[];
+  coachingBatches: import('../types').CoachingBatch[];
   loading: boolean;
   error: string | null;
   createBooking: (booking: Booking) => Promise<void>;
@@ -108,6 +119,8 @@ interface BookingContextValue {
   checkInBooking: (id: string) => Promise<void>;
   completeBooking: (id: string) => Promise<void>;
   addCustomer: (customer: Customer) => Promise<void>;
+  updateCustomer: (id: string, dto: Partial<Customer>) => Promise<void>;
+  deleteCustomer: (id: string) => Promise<void>;
   checkConflicts: (proposed: ProposedBooking, ignoreBookingId?: string) => Conflict[];
   getBookingsForDate: (date: Date) => Booking[];
   getBookingsForResource: (resourceId: string, date: Date) => Booking[];
@@ -123,6 +136,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     bookings: [],
     customers: [],
     resources: [],
+    coachingBatches: [],
     loading: true,
     error: null,
   });
@@ -131,12 +145,13 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const fetchAllData = useCallback(async () => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      const [bookings, customers, resources] = await Promise.all([
+      const [bookings, customers, resources, coachingBatches] = await Promise.all([
         bookingApi.getAll(),
         customerApi.getAll(),
         resourceApi.getAll(),
+        import('../api/batchApi').then(m => m.batchApi.getAll())
       ]);
-      dispatch({ type: 'SET_DATA', payload: { bookings, customers, resources } });
+      dispatch({ type: 'SET_DATA', payload: { bookings, customers, resources, coachingBatches } });
     } catch (err: any) {
       console.error('Failed to fetch data:', err);
       dispatch({ type: 'SET_ERROR', payload: err.message || 'Failed to load data' });
@@ -158,7 +173,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         endTime: booking.endTime,
         notes: booking.notes,
         createdBy: booking.createdBy,
-        priceCents: booking.priceCents,
+        price: booking.price,
       });
       dispatch({ type: 'CREATE_BOOKING', payload: created });
     } catch (err: any) {
@@ -213,6 +228,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         name: customer.name,
         phone: customer.phone,
         email: customer.email,
+        customerType: customer.customerType,
         preferredSport: customer.preferredSport,
         photoUrl: customer.photoUrl,
       });
@@ -223,11 +239,31 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
+  const updateCustomer = useCallback(async (id: string, dto: Partial<Customer>) => {
+    try {
+      const updated = await customerApi.update(id, dto as any);
+      dispatch({ type: 'UPDATE_CUSTOMER', payload: updated });
+    } catch (err: any) {
+      console.error('Failed to update customer:', err);
+      throw err;
+    }
+  }, []);
+
+  const deleteCustomer = useCallback(async (id: string) => {
+    try {
+      await customerApi.delete(id);
+      dispatch({ type: 'DELETE_CUSTOMER', payload: id });
+    } catch (err: any) {
+      console.error('Failed to delete customer:', err);
+      throw err;
+    }
+  }, []);
+
   // ── Client-side conflict check (still uses local data for speed) ──
   const checkConflicts = useCallback(
     (proposed: ProposedBooking, ignoreBookingId?: string) =>
-      getConflicts(proposed, state.bookings.filter(b => b.id !== ignoreBookingId), state.resources),
-    [state.bookings, state.resources]
+      getConflicts(proposed, state.bookings.filter(b => b.id !== ignoreBookingId), state.resources, state.coachingBatches),
+    [state.bookings, state.resources, state.coachingBatches]
   );
 
   const getBookingsForDate = useCallback(
@@ -273,6 +309,7 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         bookings: state.bookings,
         customers: state.customers,
         resources: state.resources,
+        coachingBatches: state.coachingBatches,
         loading: state.loading,
         error: state.error,
         createBooking,
@@ -281,6 +318,8 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
         checkInBooking,
         completeBooking,
         addCustomer,
+        updateCustomer,
+        deleteCustomer,
         checkConflicts,
         getBookingsForDate,
         getBookingsForResource,

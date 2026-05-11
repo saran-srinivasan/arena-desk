@@ -10,7 +10,7 @@ const defaultUser: AppUser = {
   id: 'user-1',
   name: 'Alex Rivera',
   role: 'Super Admin',
-  avatarUrl: 'https://picsum.photos/seed/alex/100/100',
+  avatarUrl: 'https://picsum.photos/seed/alex',
 };
 
 // ── Actions ───────────────────────────────────────────────────
